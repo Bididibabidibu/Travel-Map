@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My European Trip - Detailed Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- Load Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        /* 1. Full Screen Map */
+        html, body { height: 100%; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #map { height: 100%; width: 100vw; background: #eef2f5; }
+        
+        /* 2. Label Styling (The Box) */
+        .custom-label {
+            background: white;
+            border: 2px solid #333;
+            border-radius: 6px;
+            box-shadow: 3px 3px 10px rgba(0,0,0,0.4);
+            color: #333;
+            /* Ensure text is big enough */
+            font-size: 14px; 
+            width: max-content; /* Box grows to fit text */
+            transition: all 0.2s ease;
+        }
+
+        /* 3. Header (City Name) */
+        .label-header {
+            background-color: #0078ff;
+            color: white;
+            padding: 5px 10px;
+            font-weight: bold;
+            font-size: 16px; /* Bigger City Name */
+            border-radius: 4px 4px 0 0;
+        }
+
+        /* 4. Details Section (Hidden by default when zoomed out) */
+        .label-details {
+            padding: 8px 10px;
+            display: none; /* Hidden at low zoom */
+            line-height: 1.5;
+        }
+
+        .label-row { display: block; }
+        .price-tag { color: #d60000; font-weight: bold; }
+        .hotel-name { font-style: italic; color: #555; }
+        
+        /* 5. Logic to SHOW details when specific class is added to map */
+        .show-details-mode .label-details {
+            display: block !important;
+        }
+        
+        /* Remove bottom rounded corners if details are shown */
+        .show-details-mode .label-header {
+            border-radius: 4px 4px 0 0;
+        }
+        /* Add rounded corners if details are hidden */
+        .label-header {
+            border-radius: 4px;
+        }
+
+        /* 6. Legend Styling */
+        .legend {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+            font-size: 14px;
+            margin-bottom: 30px;
+            margin-left: 20px;
+        }
+        .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 8px; }
+        .line { display: inline-block; width: 25px; height: 4px; margin-right: 8px; vertical-align: middle; }
+
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <!-- Load Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        // --- 1. CONFIGURATION ---
+        // Create the map
+        var map = L.map('map', {
+            zoomControl: false // We will move the zoom control later if needed, or stick to default
+        }).setView([47.0, 10.0], 5);
+
+        // Add Zoom Control to top right
+        L.control.zoom({ position: 'topright' }).addTo(map);
+
+        // Add Tiles
+        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap'
+        }).addTo(map);
+
+        // --- 2. DATA (From your PDF) ---
+        var locations = [
+            { 
+                city: "Copenhagen", lat: 55.6761, lng: 12.5683, 
+                dates: "Dec 20 / Jan 4", 
+                hotel: "Home / Flight Hub", 
+                price: "-",
+                type: "start"
+            },
+            { 
+                city: "Paris", lat: 48.8566, lng: 2.3522, 
+                dates: "Dec 20 - 24", 
+                hotel: "Paris XHS & Airbnb", 
+                price: "150 / 315 DKK",
+                type: "stay"
+            },
+            { 
+                city: "Basel", lat: 47.5596, lng: 7.5886, 
+                dates: "Dec 24", 
+                hotel: "Basel Airbnb", 
+                price: "312 DKK",
+                type: "stay"
+            },
+            { 
+                city: "Zurich", lat: 47.3769, lng: 8.5417, 
+                dates: "Dec 25", 
+                hotel: "Transfer Only", 
+                price: "-",
+                type: "transfer"
+            },
+            { 
+                city: "Grindelwald", lat: 46.6242, lng: 8.0414, 
+                dates: "Dec 25", 
+                hotel: "Grindelwald Hotel", 
+                price: "670 DKK",
+                type: "stay"
+            },
+            { 
+                city: "Chur", lat: 46.8503, lng: 9.5319, 
+                dates: "Dec 26 - 28", 
+                hotel: "Chur Hotel", 
+                price: "1353 DKK",
+                type: "stay"
+            },
+            { 
+                city: "Vals", lat: 46.6176, lng: 9.1807, 
+                dates: "Dec 27", 
+                hotel: "Zumthor Spa (Visit)", 
+                price: "-",
+                type: "side"
+            },
+            { 
+                city: "Milan", lat: 45.4642, lng: 9.1900, 
+                dates: "Dec 28 - 30", 
+                hotel: "Milan Airbnb", 
+                price: "312 DKK",
+                type: "stay"
+            },
+            { 
+                city: "Florence", lat: 43.7696, lng: 11.2558, 
+                dates: "Dec 30 - Jan 1", 
+                hotel: "Florence Airbnb", 
+                price: "N/A",
+                type: "stay"
+            },
+            { 
+                city: "Rome", lat: 41.9028, lng: 12.4964, 
+                dates: "Jan 1 - Jan 4", 
+                hotel: "Via Andrea Doria", 
+                price: "364 DKK",
+                type: "stay"
+            }
+        ];
+
+        // --- 3. DRAWING THE MAP ---
+
+        // Helper to get color based on type
+        function getColor(type) {
+            if (type === 'side') return '#ff8800'; // Orange
+            if (type === 'transfer') return '#7f8c8d'; // Grey
+            return '#0078ff'; // Blue
+        }
+
+        locations.forEach(function(loc) {
+            
+            // A. Add the Dot (CircleMarker)
+            L.circleMarker([loc.lat, loc.lng], {
+                color: 'white',
+                fillColor: getColor(loc.type),
+                fillOpacity: 1,
+                radius: 8,
+                weight: 2
+            }).addTo(map);
+
+            // B. Create the HTML Content for the Label
+            var htmlContent = `
+                <div class="custom-label">
+                    <div class="label-header" style="background-color: ${getColor(loc.type)}">
+                        ${loc.city}
+                    </div>
+                    <div class="label-details">
+                        <span class="label-row">📅 ${loc.dates}</span>
+                        <span class="label-row hotel-name">🏨 ${loc.hotel}</span>
+                        <span class="label-row price-tag">💰 ${loc.price} /pp</span>
+                    </div>
+                </div>
+            `;
+
+            // C. Add the Label to the map
+            var icon = L.divIcon({
+                className: 'custom-div-icon', // Dummy class, styling is inline above
+                html: htmlContent,
+                iconSize: [null, null], // Auto size
+                iconAnchor: [-15, 20]   // Offset: Right 15px, Down 20px
+            });
+
+            L.marker([loc.lat, loc.lng], {icon: icon}).addTo(map);
+        });
+
+        // --- 4. DRAWING ROUTES ---
+        var pathStyle = { weight: 4, opacity: 0.7 };
+        
+        // Flight: CPH -> Paris
+        L.polyline([[55.6761, 12.5683], [48.8566, 2.3522]], 
+            {color: '#d60000', weight: 3, dashArray: '10, 10'}).addTo(map);
+
+        // Train Sequence
+        var trainCoords = [
+            [48.8566, 2.3522], // Paris
+            [47.5596, 7.5886], // Basel
+            [47.3769, 8.5417], // Zurich
+            [46.6242, 8.0414], // Grindelwald
+            [46.8503, 9.5319], // Chur
+            [45.4642, 9.1900], // Milan
+            [43.7696, 11.2558], // Florence
+            [41.9028, 12.4964]  // Rome
+        ];
+        L.polyline(trainCoords, {color: '#0078ff', weight: 4}).addTo(map);
+
+        // Side Trip: Chur -> Vals
+        L.polyline([[46.8503, 9.5319], [46.6176, 9.1807]], 
+            {color: '#ff8800', weight: 3}).addTo(map);
+
+        // Flight: Rome -> CPH
+        L.polyline([[41.9028, 12.4964], [55.6761, 12.5683]], 
+            {color: '#d60000', weight: 3, dashArray: '10, 10'}).addTo(map);
+
+
+        // --- 5. LEGEND ---
+        var legend = L.control({position: 'bottomleft'});
+        legend.onAdd = function (map) {
+            var div = L.DomUtil.create('div', 'legend');
+            div.innerHTML = `
+                <h3>Trip Legend</h3>
+                <div><span class="dot" style="background:#0078ff;"></span>Main Stay</div>
+                <div><span class="dot" style="background:#ff8800;"></span>Side Trip</div>
+                <div><span class="dot" style="background:#7f8c8d;"></span>Transfer</div>
+                <hr style="margin:8px 0; border:0; border-top:1px solid #ddd;">
+                <div><span class="line" style="background:#0078ff;"></span>Train</div>
+                <div><span class="line" style="border-top: 3px dashed #d60000;"></span>Flight</div>
+                <br>
+                <em><strong>Tip:</strong> Zoom in to see hotel & prices.</em>
+            `;
+            return div;
+        };
+        legend.addTo(map);
+
+        // --- 6. SMART ZOOM LOGIC ---
+        // This function adds/removes a CSS class to the map based on zoom level
+        function updateLabels() {
+            var zoom = map.getZoom();
+            var mapDiv = document.getElementById('map');
+            
+            // If Zoom is greater than 6, show details
+            if (zoom >= 7) {
+                mapDiv.classList.add('show-details-mode');
+            } else {
+                mapDiv.classList.remove('show-details-mode');
+            }
+        }
+
+        // Listen for zoom events
+        map.on('zoomend', updateLabels);
+        
+        // Trigger once on load
+        updateLabels();
+
+        // Fit map to markers
+        var group = new L.featureGroup(locations.map(l => L.marker([l.lat, l.lng])));
+        map.fitBounds(group.getBounds().pad(0.1));
+
+    </script>
+</body>
+</html>
